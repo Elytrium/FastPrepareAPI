@@ -250,8 +250,12 @@ public class PreparedPacketFactory {
   }
 
   public void inject(Player player, MinecraftConnection connection, ChannelPipeline pipeline) {
+    this.inject(player.isOnlineMode(), connection, pipeline);
+  }
+
+  public void inject(boolean onlineMode, MinecraftConnection connection, ChannelPipeline pipeline) {
     pipeline.addAfter(Connections.MINECRAFT_ENCODER, PREPARED_ENCODER,
-        new PreparedPacketEncoder(this, connection.getProtocolVersion(), player.isOnlineMode()));
+        new PreparedPacketEncoder(this, connection.getProtocolVersion(), onlineMode));
     pipeline.addFirst(COMPRESSION_HANDLER, new CompressionEventHandler(this));
   }
 
