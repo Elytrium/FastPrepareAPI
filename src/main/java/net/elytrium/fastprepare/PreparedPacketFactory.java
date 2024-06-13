@@ -44,9 +44,9 @@ import java.lang.invoke.MethodType;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import net.elytrium.commons.utils.reflection.ReflectionException;
 import net.elytrium.fastprepare.dummy.DummyChannelHandlerContext;
 import net.elytrium.fastprepare.handler.CompressionEventHandler;
@@ -66,7 +66,7 @@ public class PreparedPacketFactory {
   private static final MethodHandle PACKET_CLASS_TO_ID;
   private static final boolean DIRECT_BYTEBUF_PREFERRED_FOR_COMPRESSOR;
 
-  private final Set<StateRegistry> stateRegistries = new HashSet<>();
+  private final Set<StateRegistry> stateRegistries = ConcurrentHashMap.newKeySet();
   private final PreparedPacketConstructor constructor;
   private final Map<Thread, MinecraftCompressorAndLengthEncoder> compressionEncoder;
   private final boolean releaseReferenceCounted;
