@@ -21,6 +21,7 @@ import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.natives.NativeSetupException;
 import com.velocitypowered.natives.compression.VelocityCompressor;
+import com.velocitypowered.natives.encryption.JavaVelocityCipher;
 import com.velocitypowered.natives.util.BufferPreference;
 import com.velocitypowered.natives.util.Natives;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
@@ -29,7 +30,6 @@ import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import com.velocitypowered.proxy.protocol.StateRegistry;
 import com.velocitypowered.proxy.protocol.netty.MinecraftCompressorAndLengthEncoder;
-import com.velocitypowered.proxy.protocol.netty.MinecraftVarintLengthEncoder;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -59,12 +59,11 @@ public class PreparedPacketFactory {
   public static final String COMPRESSION_HANDLER = "fastprepare-compression-handler";
   private static final MethodHandle HANDLE_COMPRESSED;
   private static final MethodHandle ALLOCATE_COMPRESSED;
-  private static final MethodHandle HANDLE_VARINT;
-  private static final MethodHandle ALLOCATE_VARINT;
   private static final MethodHandle CLIENTBOUND_FIELD;
   private static final MethodHandle GET_PROTOCOL_REGISTRY;
   private static final MethodHandle PACKET_CLASS_TO_ID;
   private static final boolean DIRECT_BYTEBUF_PREFERRED_FOR_COMPRESSOR;
+  private static final boolean JAVA_CIPHER;
 
   private final Set<StateRegistry> stateRegistries = ConcurrentHashMap.newKeySet();
   private final PreparedPacketConstructor constructor;
@@ -85,12 +84,6 @@ public class PreparedPacketFactory {
       ALLOCATE_COMPRESSED = MethodHandles.privateLookupIn(MinecraftCompressorAndLengthEncoder.class, MethodHandles.lookup())
           .findVirtual(MinecraftCompressorAndLengthEncoder.class, "allocateBuffer",
               MethodType.methodType(ByteBuf.class, ChannelHandlerContext.class, ByteBuf.class, boolean.class));
-      HANDLE_VARINT = MethodHandles.privateLookupIn(MinecraftVarintLengthEncoder.class, MethodHandles.lookup())
-          .findVirtual(MinecraftVarintLengthEncoder.class, "encode",
-              MethodType.methodType(void.class, ChannelHandlerContext.class, ByteBuf.class, ByteBuf.class));
-      ALLOCATE_VARINT = MethodHandles.privateLookupIn(MinecraftVarintLengthEncoder.class, MethodHandles.lookup())
-          .findVirtual(MinecraftVarintLengthEncoder.class, "allocateBuffer",
-              MethodType.methodType(ByteBuf.class, ChannelHandlerContext.class, ByteBuf.class, boolean.class));
       CLIENTBOUND_FIELD = MethodHandles.privateLookupIn(StateRegistry.class, MethodHandles.lookup())
           .findGetter(StateRegistry.class, "clientbound", StateRegistry.PacketRegistry.class);
       GET_PROTOCOL_REGISTRY = MethodHandles.privateLookupIn(StateRegistry.PacketRegistry.class, MethodHandles.lookup())
@@ -104,6 +97,7 @@ public class PreparedPacketFactory {
         DIRECT_BYTEBUF_PREFERRED_FOR_COMPRESSOR = bufferType.equals(BufferPreference.DIRECT_PREFERRED)
             || bufferType.equals(BufferPreference.DIRECT_REQUIRED);
       }
+      JAVA_CIPHER = Natives.cipher.get() == JavaVelocityCipher.FACTORY;
     } catch (NoSuchMethodException | IllegalAccessException | NoSuchFieldException e) {
       throw new ReflectionException(e);
     }
@@ -197,8 +191,10 @@ public class PreparedPacketFactory {
         networkPacket = (ByteBuf) ALLOCATE_COMPRESSED.invokeExact(this.getThreadLocalCompressionEncoder(), this.dummyContext, packetData, false);
         HANDLE_COMPRESSED.invokeExact(this.getThreadLocalCompressionEncoder(), this.dummyContext, packetData, networkPacket);
       } else {
-        networkPacket = (ByteBuf) ALLOCATE_VARINT.invokeExact(MinecraftVarintLengthEncoder.INSTANCE, this.dummyContext, packetData, false);
-        HANDLE_VARINT.invokeExact(MinecraftVarintLengthEncoder.INSTANCE, this.dummyContext, packetData, networkPacket);
+        int capacity = ProtocolUtils.varIntBytes(packetData.readableBytes()) + packetData.readableBytes();
+        networkPacket = JAVA_CIPHER ? this.preparedPacketAllocator.heapBuffer(capacity) : this.preparedPacketAllocator.directBuffer(capacity);
+        ProtocolUtils.writeVarInt(networkPacket, packetData.readableBytes());
+        networkPacket.writeBytes(packetData);
       }
     } catch (Throwable e) {
       throw new ReflectionException(e);
