@@ -74,6 +74,7 @@ public class PreparedPacketFactory {
   private boolean enableCompression;
   private int compressionThreshold;
   private int compressionLevel;
+  private boolean compatibilityMode;
   private boolean saveUncompressed;
 
   static {
@@ -104,35 +105,39 @@ public class PreparedPacketFactory {
   }
 
   public PreparedPacketFactory(PreparedPacketConstructor constructor, StateRegistry stateRegistry, boolean enableCompression,
-                               int compressionLevel, int compressionThreshold, boolean saveUncompressed, boolean releaseReferenceCounted) {
+                               int compressionLevel, int compressionThreshold, boolean saveUncompressed,
+                               boolean releaseReferenceCounted, boolean compatibilityMode) {
     this(constructor, stateRegistry, enableCompression, compressionLevel, compressionThreshold, saveUncompressed, releaseReferenceCounted,
-        new PooledByteBufAllocator());
+        compatibilityMode, new PooledByteBufAllocator());
   }
 
   public PreparedPacketFactory(PreparedPacketConstructor constructor, StateRegistry stateRegistry, boolean enableCompression,
                                int compressionLevel, int compressionThreshold, boolean saveUncompressed, boolean releaseReferenceCounted,
-                               ByteBufAllocator preparedPacketAllocator) {
+                               boolean compatibilityMode, ByteBufAllocator preparedPacketAllocator) {
     this(constructor, Collections.singleton(stateRegistry), enableCompression, compressionLevel, compressionThreshold, saveUncompressed,
-        releaseReferenceCounted, preparedPacketAllocator);
+        releaseReferenceCounted, compatibilityMode, preparedPacketAllocator);
   }
 
   public PreparedPacketFactory(PreparedPacketConstructor constructor, Collection<StateRegistry> stateRegistries, boolean enableCompression,
                                int compressionLevel, int compressionThreshold, boolean saveUncompressed, boolean releaseReferenceCounted,
-                               ByteBufAllocator preparedPacketAllocator) {
+                               boolean compatibilityMode, ByteBufAllocator preparedPacketAllocator) {
     this.constructor = constructor;
     this.stateRegistries.addAll(stateRegistries);
     this.compressionEncoder = Collections.synchronizedMap(new HashMap<>());
-    this.updateCompressor(enableCompression, compressionLevel, compressionThreshold, saveUncompressed);
+    this.updateCompressor(enableCompression, compressionLevel, compressionThreshold, saveUncompressed, compatibilityMode);
     this.releaseReferenceCounted = releaseReferenceCounted;
     this.preparedPacketAllocator = preparedPacketAllocator;
     this.dummyContext = new DummyChannelHandlerContext(preparedPacketAllocator);
   }
 
-  public void updateCompressor(boolean enableCompression, int compressionLevel, int compressionThreshold, boolean saveUncompressed) {
+  public void updateCompressor(boolean enableCompression, int compressionLevel,
+                               int compressionThreshold, boolean saveUncompressed,
+                               boolean compatibilityMode) {
     this.enableCompression = enableCompression;
     this.compressionLevel = compressionLevel;
     this.compressionThreshold = compressionThreshold;
     this.saveUncompressed = saveUncompressed && enableCompression;
+    this.compatibilityMode = compatibilityMode;
   }
 
   public void releaseThread(Thread thread) {
@@ -272,6 +277,10 @@ public class PreparedPacketFactory {
 
   public boolean isCompressionEnabled() {
     return this.enableCompression;
+  }
+
+  public boolean isCompatibilityMode() {
+    return this.compatibilityMode;
   }
 
   public boolean shouldSaveUncompressed() {

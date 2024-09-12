@@ -19,6 +19,7 @@ package net.elytrium.fastprepare.handler;
 
 import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.proxy.protocol.MinecraftPacket;
+import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -54,6 +55,22 @@ public class PreparedPacketEncoder extends ChannelOutboundHandlerAdapter {
     }
 
     if (msg instanceof PreparedPacket preparedPacket) {
+      if (this.factory.isCompatibilityMode()) {
+        ByteBuf uncompressedPacket = preparedPacket.getUncompressedPackets(this.protocolVersion);
+        if (uncompressedPacket == null) {
+          throw new IllegalStateException("Failed to find compatible uncompressed packet for " + this.protocolVersion);
+        }
+
+        ByteBuf uncompressed = uncompressedPacket.slice();
+        while (uncompressed.isReadable()) {
+          ctx.write(uncompressed.readRetainedSlice(ProtocolUtils.readVarInt(uncompressed)), promise);
+          if (!promise.isVoid()) {
+            promise = ctx.newPromise();
+          }
+        }
+        return;
+      }
+
       ByteBuf cachedPacket = this.isSendUncompressed()
           ? preparedPacket.getUncompressedPackets(this.protocolVersion) : preparedPacket.getPackets(this.protocolVersion);
 
@@ -62,7 +79,7 @@ public class PreparedPacketEncoder extends ChannelOutboundHandlerAdapter {
       }
 
       ctx.write(this.duplicateFunction.apply(cachedPacket), promise);
-    } else if (msg instanceof MinecraftPacket) {
+    } else if (msg instanceof MinecraftPacket && !this.factory.isCompatibilityMode()) {
       if (this.isSendUncompressed()) {
         ctx.write(this.factory.encodeSingle((MinecraftPacket) msg, this.protocolVersion, false, ctx.alloc()), promise);
       } else {
