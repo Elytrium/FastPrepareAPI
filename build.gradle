@@ -11,7 +11,7 @@ plugins() {
 }
 
 this.group = "net.elytrium"
-this.version = "1.0.12"
+this.version = "1.0.13"
 
 compileJava() {
     sourceCompatibility = JavaVersion.VERSION_17

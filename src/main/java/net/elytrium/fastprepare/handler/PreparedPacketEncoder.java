@@ -63,7 +63,7 @@ public class PreparedPacketEncoder extends ChannelOutboundHandlerAdapter {
 
         ByteBuf uncompressed = uncompressedPacket.slice();
         while (uncompressed.isReadable()) {
-          ctx.write(uncompressed.readRetainedSlice(ProtocolUtils.readVarInt(uncompressed)), promise);
+          ctx.write(uncompressed.readBytes(ProtocolUtils.readVarInt(uncompressed)), promise);
           if (!promise.isVoid()) {
             promise = ctx.newPromise();
           }
